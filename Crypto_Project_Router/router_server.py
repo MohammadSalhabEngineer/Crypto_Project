@@ -2,8 +2,8 @@
 Central Router Server for the Cryptography Project.
 
 The router handles:
-- Client connections (3 pods)
-- RSA public key exchange between clients
+- Client connections (pods)
+- Diffie-Hellman public key exchange between clients
 - Message routing by source/destination IDs
 - Displaying Caesar cipher decoys (without being able to decrypt real AES content)
 - Multi-threaded handling of multiple clients
@@ -12,7 +12,6 @@ The router handles:
 import socket
 import threading
 import json
-import time
 from datetime import datetime
 from crypto_utils import CryptoUtils
 
@@ -31,7 +30,7 @@ class RouterServer:
         self.host = host
         self.port = port
         self.server_socket = None
-        self.clients = {}  # {client_id: {'socket': socket, 'address': address, 'public_key': key}}
+        self.clients = {}  # {client_id: {'socket': socket, 'address': address, 'dh_public_key': key}}
         self.clients_lock = threading.Lock()
         self.running = False
 
@@ -46,19 +45,17 @@ class RouterServer:
             self.running = True
 
             print("=" * 60)
-            print("CRYPTOGRAPHY ROUTER SERVER")
+            print("CRYPTOGRAPHY ROUTER SERVER (Diffie-Hellman)")
             print("=" * 60)
             print(f"Server started on {self.host}:{self.port}")
             print(f"Waiting for pod connections...")
             print("=" * 60 + "\n")
 
-            # Accept connections in a loop
             while self.running:
                 try:
                     client_socket, address = self.server_socket.accept()
                     print(f"[{self._timestamp()}] New connection from {address}")
 
-                    # Start a new thread to handle this client
                     client_thread = threading.Thread(
                         target=self.handle_client,
                         args=(client_socket, address),
@@ -76,59 +73,45 @@ class RouterServer:
             self.stop()
 
     def handle_client(self, client_socket, address):
-        """
-        Handle communication with a connected client.
-
-        Args:
-            client_socket: Socket object for the client
-            address: Client address tuple
-        """
+        """Handle communication with a connected client."""
         client_id = None
 
         try:
-            # Receive initial registration message
             data = self._receive_message(client_socket)
 
             if data and data.get('type') == 'register':
                 client_id = data.get('client_id')
-                public_key_pem = data.get('public_key')
+                dh_public_key = data.get('dh_public_key')
 
-                if client_id and public_key_pem:
-                    # Store client information
+                if client_id and dh_public_key:
                     with self.clients_lock:
                         self.clients[client_id] = {
                             'socket': client_socket,
                             'address': address,
-                            'public_key': public_key_pem
+                            'dh_public_key': dh_public_key
                         }
 
                     print(f"[{self._timestamp()}] Pod '{client_id}' registered from {address}")
                     print(f"                      Total connected pods: {len(self.clients)}")
 
-                    # Send acknowledgment
                     self._send_message(client_socket, {
                         'type': 'register_ack',
                         'status': 'success',
-                        'message': f'Welcome {client_id}! You are now connected to the router.'
+                        'message': f'Welcome {client_id}!'
                     })
 
-                    # Broadcast updated client list to all clients
                     self._broadcast_client_list()
 
-                    # Handle subsequent messages from this client
                     while self.running:
                         msg_data = self._receive_message(client_socket)
-
                         if msg_data is None:
-                            break  # Connection closed
-
+                            break
                         self.process_message(client_id, msg_data)
 
         except Exception as e:
             print(f"[{self._timestamp()}] Error handling client {client_id or address}: {e}")
 
         finally:
-            # Clean up client connection
             if client_id:
                 with self.clients_lock:
                     if client_id in self.clients:
@@ -136,7 +119,6 @@ class RouterServer:
                         print(f"[{self._timestamp()}] Pod '{client_id}' disconnected")
                         print(f"                      Remaining pods: {len(self.clients)}")
 
-                # Notify other clients about disconnection
                 self._broadcast_client_list()
 
             try:
@@ -145,64 +127,39 @@ class RouterServer:
                 pass
 
     def process_message(self, source_id, message_data):
-        """
-        Process a message from a client and route it appropriately.
-
-        Args:
-            source_id (str): ID of the sender
-            message_data (dict): Message data
-        """
+        """Process a message from a client and route it appropriately."""
         msg_type = message_data.get('type')
 
-        if msg_type == 'request_public_key':
-            # Client requesting another client's public key
+        if msg_type == 'request_dh_public_key':
             target_id = message_data.get('target_id')
-            self.send_public_key(source_id, target_id)
+            self.send_dh_public_key(source_id, target_id)
 
         elif msg_type == 'encrypted_message':
-            # Route encrypted message to destination
             self.route_message(source_id, message_data)
-
-        elif msg_type == 'broadcast':
-            # Broadcast message to all clients
-            self.broadcast_message(source_id, message_data)
 
         else:
             print(f"[{self._timestamp()}] Unknown message type from {source_id}: {msg_type}")
 
-    def send_public_key(self, requester_id, target_id):
-        """
-        Send a client's public key to another client.
-
-        Args:
-            requester_id (str): ID of the client requesting the key
-            target_id (str): ID of the target client
-        """
+    def send_dh_public_key(self, requester_id, target_id):
+        """Send a client's DH public key to another client."""
         with self.clients_lock:
             if target_id in self.clients:
-                public_key = self.clients[target_id]['public_key']
+                dh_public_key = self.clients[target_id]['dh_public_key']
                 requester_socket = self.clients[requester_id]['socket']
 
                 response = {
-                    'type': 'public_key_response',
+                    'type': 'dh_public_key_response',
                     'target_id': target_id,
-                    'public_key': public_key
+                    'dh_public_key': dh_public_key
                 }
 
                 self._send_message(requester_socket, response)
-                print(f"[{self._timestamp()}] Sent {target_id}'s public key to {requester_id}")
+                print(f"[{self._timestamp()}] Sent {target_id}'s DH public key to {requester_id}")
             else:
-                print(f"[{self._timestamp()}] Public key request failed: {target_id} not connected")
+                print(f"[{self._timestamp()}] DH key request failed: {target_id} not connected")
 
     def route_message(self, source_id, message_data):
-        """
-        Route an encrypted message to the destination client.
-        The router can see the Caesar cipher decoy but cannot decrypt the real message.
-
-        Args:
-            source_id (str): ID of the sender
-            message_data (dict): Message containing encrypted content
-        """
+        """Route an encrypted message to the destination client."""
         dest_id = message_data.get('dest_id')
         caesar_decoy = message_data.get('caesar_decoy', 'N/A')
 
@@ -213,22 +170,19 @@ class RouterServer:
         print(f"To:             {dest_id}")
         print(f"Caesar Decoy:   {caesar_decoy}")
 
-        # Try to decrypt Caesar cipher to show router's perspective
         try:
             decrypted_decoy = CryptoUtils.caesar_cipher_decrypt(caesar_decoy)
             print(f"Decoy Decrypted: {decrypted_decoy}")
         except:
-            print(f"Decoy Decrypted: (failed to decrypt)")
+            print(f"Decoy Decrypted: (failed)")
 
         print(f"Real Message:   [ENCRYPTED - Router cannot decrypt AES]")
         print("=" * 60 + "\n")
 
-        # Route the message to destination
         with self.clients_lock:
             if dest_id in self.clients:
                 dest_socket = self.clients[dest_id]['socket']
 
-                # Forward the message
                 forwarded_message = {
                     'type': 'incoming_message',
                     'source_id': source_id,
@@ -239,7 +193,6 @@ class RouterServer:
                 print(f"[{self._timestamp()}] Message forwarded to {dest_id}")
 
             else:
-                # Destination not connected, send error back to sender
                 print(f"[{self._timestamp()}] Routing failed: {dest_id} not connected")
 
                 if source_id in self.clients:
@@ -248,26 +201,6 @@ class RouterServer:
                         'message': f'Destination {dest_id} is not connected'
                     }
                     self._send_message(self.clients[source_id]['socket'], error_msg)
-
-    def broadcast_message(self, source_id, message_data):
-        """
-        Broadcast a message to all connected clients except the sender.
-
-        Args:
-            source_id (str): ID of the sender
-            message_data (dict): Message data
-        """
-        print(f"[{self._timestamp()}] Broadcasting message from {source_id}")
-
-        with self.clients_lock:
-            for client_id, client_info in self.clients.items():
-                if client_id != source_id:
-                    broadcast_msg = {
-                        'type': 'broadcast_message',
-                        'source_id': source_id,
-                        'message': message_data.get('message', '')
-                    }
-                    self._send_message(client_info['socket'], broadcast_msg)
 
     def _broadcast_client_list(self):
         """Broadcast the list of connected clients to all clients."""
@@ -283,13 +216,7 @@ class RouterServer:
                 self._send_message(client_info['socket'], message)
 
     def _send_message(self, client_socket, message_dict):
-        """
-        Send a JSON message to a client.
-
-        Args:
-            client_socket: Socket to send to
-            message_dict (dict): Message to send
-        """
+        """Send a JSON message to a client."""
         try:
             message_json = json.dumps(message_dict)
             message_bytes = message_json.encode('utf-8')
@@ -300,24 +227,14 @@ class RouterServer:
             print(f"[ERROR] Failed to send message: {e}")
 
     def _receive_message(self, client_socket):
-        """
-        Receive a JSON message from a client.
-
-        Args:
-            client_socket: Socket to receive from
-
-        Returns:
-            dict or None: Received message or None if connection closed
-        """
+        """Receive a JSON message from a client."""
         try:
-            # Read length prefix (4 bytes)
             length_bytes = self._recv_exactly(client_socket, 4)
             if not length_bytes:
                 return None
 
             message_length = int.from_bytes(length_bytes, byteorder='big')
 
-            # Read the message
             message_bytes = self._recv_exactly(client_socket, message_length)
             if not message_bytes:
                 return None
@@ -326,20 +243,10 @@ class RouterServer:
             return json.loads(message_json)
 
         except Exception as e:
-            print(f"[ERROR] Failed to receive message: {e}")
             return None
 
     def _recv_exactly(self, client_socket, num_bytes):
-        """
-        Receive exactly num_bytes from socket.
-
-        Args:
-            client_socket: Socket to receive from
-            num_bytes (int): Number of bytes to receive
-
-        Returns:
-            bytes or None: Received bytes or None if connection closed
-        """
+        """Receive exactly num_bytes from socket."""
         data = b''
         while len(data) < num_bytes:
             chunk = client_socket.recv(num_bytes - len(data))
@@ -358,7 +265,6 @@ class RouterServer:
 
         print(f"\n[{self._timestamp()}] Shutting down router server...")
 
-        # Close all client connections
         with self.clients_lock:
             for client_id, client_info in self.clients.items():
                 try:
@@ -367,7 +273,6 @@ class RouterServer:
                     pass
             self.clients.clear()
 
-        # Close server socket
         if self.server_socket:
             try:
                 self.server_socket.close()

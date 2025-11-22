@@ -12,7 +12,11 @@ import socket
 import threading
 import json
 import time
+import os
+import base64
+from datetime import datetime
 from crypto_utils import CryptoUtils
+from stego_utils import StegoUtils
 
 
 class PodClient:
@@ -126,12 +130,12 @@ class PodClient:
             print(f"[INFO] Established shared secret with {target_id}")
 
     def _handle_incoming_message(self, msg):
-        """Handle incoming encrypted message."""
+        """Handle incoming encrypted message with steganography."""
         source_id = msg.get('source_id')
         message_data = msg.get('message_data', {})
 
         caesar_decoy = message_data.get('caesar_decoy', 'N/A')
-        encrypted_message = message_data.get('encrypted_message')
+        stego_image_base64 = message_data.get('stego_image')
 
         print(f"\n{'=' * 60}")
         print(f"MESSAGE RECEIVED FROM {source_id}")
@@ -145,16 +149,43 @@ class PodClient:
         except:
             print(f"Decoy Decrypted: (failed)")
 
-        # Decrypt real message
-        if source_id in self.shared_secrets and encrypted_message:
+        # Process stego image and decrypt real message
+        if source_id in self.shared_secrets and stego_image_base64:
             try:
-                shared_key = self.shared_secrets[source_id]
-                plaintext = CryptoUtils.aes_gcm_decrypt(shared_key, encrypted_message)
-                print(f"Real Message: {plaintext.decode('utf-8')}")
+                # Create received_images folder
+                os.makedirs("received_images", exist_ok=True)
+
+                # Generate filename with timestamp
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                image_filename = f"received_images/from_{source_id}_{timestamp}.png"
+
+                # Decode base64 and save image
+                image_bytes = base64.b64decode(stego_image_base64)
+                with open(image_filename, 'wb') as f:
+                    f.write(image_bytes)
+
+                print(f"Image saved: {image_filename}")
+
+                # Extract encrypted message from image
+                extracted_data = StegoUtils.decode_message_from_image(image_filename)
+
+                if extracted_data:
+                    # Decrypt the extracted message
+                    shared_key = self.shared_secrets[source_id]
+                    plaintext = CryptoUtils.aes_gcm_decrypt(shared_key, extracted_data)
+                    print(f"Real Message (extracted from image): {plaintext.decode('utf-8')}")
+                else:
+                    print(f"Real Message: [FAILED TO EXTRACT FROM IMAGE]")
+
             except Exception as e:
                 print(f"Real Message: [DECRYPTION FAILED - {e}]")
+                import traceback
+                traceback.print_exc()
         else:
-            print(f"Real Message: [NO SHARED SECRET WITH {source_id}]")
+            if source_id not in self.shared_secrets:
+                print(f"Real Message: [NO SHARED SECRET WITH {source_id}]")
+            else:
+                print(f"Real Message: [NO STEGO IMAGE RECEIVED]")
 
         print(f"{'=' * 60}\n")
 
@@ -196,23 +227,53 @@ class PodClient:
             # Encrypt decoy with Caesar cipher
             caesar_decoy = CryptoUtils.caesar_cipher_encrypt(decoy_message)
 
-            # Send message
+            # Embed encrypted message in image using LSB steganography
+            cover_image = "Not_A_Secret_Message.jpg"
+            stego_output = "stego_temp.png"
+
+            if not os.path.exists(cover_image):
+                print(f"[ERROR] Cover image '{cover_image}' not found!")
+                return False
+
+            # Embed AES-encrypted message in image
+            success = StegoUtils.encode_message_in_image(
+                cover_image,
+                encrypted_message,  # Embed the encrypted data
+                stego_output
+            )
+
+            if not success:
+                print(f"[ERROR] Failed to embed message in image")
+                return False
+
+            # Read stego image and convert to base64
+            with open(stego_output, 'rb') as f:
+                image_bytes = f.read()
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+            # Clean up temp file
+            os.remove(stego_output)
+
+            # Send message with stego image
             msg = {
                 'type': 'encrypted_message',
                 'dest_id': dest_id,
                 'caesar_decoy': caesar_decoy,
-                'encrypted_message': encrypted_message
+                'stego_image': image_base64
             }
 
             self._send_message(msg)
             print(f"\n[SUCCESS] Message sent to {dest_id}")
-            print(f"Decoy sent: {caesar_decoy}")
-            print(f"Real message encrypted with AES-GCM\n")
+            print(f"Caesar Decoy: {caesar_decoy}")
+            print(f"Real message hidden in image using LSB steganography")
+            print(f"Image size: {len(image_base64)} bytes (base64)\n")
 
             return True
 
         except Exception as e:
             print(f"[ERROR] Failed to send message: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
     def _send_message(self, message_dict):

@@ -274,10 +274,25 @@ def main():
 
     # Get configuration
     pod_id = input("Enter your Pod ID (e.g., POD_1, POD_2, POD_3): ").strip()
-    router_host = input("Enter router IP address (default: localhost): ").strip() or "localhost"
+    router_input = input("Enter router IP:PORT (default: localhost:5555): ").strip() or "localhost:5555"
+
+    # Parse IP and port
+    if ':' in router_input:
+        try:
+            router_host, port_str = router_input.rsplit(':', 1)
+            router_port = int(port_str)
+        except (ValueError, AttributeError):
+            print("[ERROR] Invalid IP:PORT format. Using localhost:5555")
+            router_host = "localhost"
+            router_port = 5555
+    else:
+        router_host = router_input
+        router_port = 5555
+
+    print(f"[INFO] Connecting to {router_host}:{router_port}...")
 
     # Create and connect client
-    client = PodClient(pod_id, router_host)
+    client = PodClient(pod_id, router_host, router_port)
 
     if not client.connect():
         print("[ERROR] Failed to connect to router")

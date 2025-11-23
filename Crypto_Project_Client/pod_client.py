@@ -138,7 +138,18 @@ class PodClient:
         if source_id not in self.shared_secrets:
             print(f"[INFO] No shared secret with {source_id}, requesting public key...")
             self.request_shared_secret(source_id)
-            time.sleep(1.5)  # Wait for DH key exchange to complete
+
+            # Wait for shared secret to be established (with timeout)
+            max_wait = 5.0  # 5 seconds max
+            waited = 0.0
+            while source_id not in self.shared_secrets and waited < max_wait:
+                time.sleep(0.1)
+                waited += 0.1
+
+            if source_id in self.shared_secrets:
+                print(f"[INFO] Shared secret established with {source_id}")
+            else:
+                print(f"[ERROR] Timeout waiting for shared secret with {source_id}")
 
         caesar_decoy = message_data.get('caesar_decoy', 'N/A')
         stego_image_base64 = message_data.get('stego_image')

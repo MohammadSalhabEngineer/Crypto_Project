@@ -1,6 +1,6 @@
 """
 Steganography utilities for hiding encrypted messages in images.
-Uses LSB (Least Significant Bit) technique to embed data in image pixels.
+Uses LSB (Least Significant Bit)
 """
 
 from PIL import Image
@@ -9,19 +9,10 @@ import json
 
 
 class StegoUtils:
-    """Steganography utility class for LSB image steganography."""
 
     @staticmethod
     def text_to_bits(text):
-        """
-        Convert text to binary string.
 
-        Args:
-            text (str): Text to convert
-
-        Returns:
-            str: Binary representation of the text
-        """
         if isinstance(text, str):
             text = text.encode('utf-8')
         bits = ''.join(format(byte, '08b') for byte in text)
@@ -29,15 +20,7 @@ class StegoUtils:
 
     @staticmethod
     def bits_to_text(bits):
-        """
-        Convert binary string to text.
 
-        Args:
-            bits (str): Binary string
-
-        Returns:
-            str: Decoded text
-        """
         # Ensure bits length is multiple of 8
         bits = bits[:len(bits) - (len(bits) % 8)]
 
@@ -53,17 +36,7 @@ class StegoUtils:
 
     @staticmethod
     def encode_message_in_image(image_path, message_data, output_path):
-        """
-        Hide a message in an image using LSB steganography.
 
-        Args:
-            image_path (str): Path to the cover image
-            message_data (dict or str): Message data to hide (will be JSON-encoded)
-            output_path (str): Path to save the stego image
-
-        Returns:
-            bool: True if successful, False otherwise
-        """
         try:
             # Load the image
             img = Image.open(image_path)
@@ -112,15 +85,7 @@ class StegoUtils:
 
     @staticmethod
     def decode_message_from_image(image_path):
-        """
-        Extract hidden message from a stego image.
 
-        Args:
-            image_path (str): Path to the stego image
-
-        Returns:
-            dict or str or None: Extracted message data, or None if extraction fails
-        """
         try:
             # Load the image
             img = Image.open(image_path)
@@ -160,15 +125,7 @@ class StegoUtils:
 
     @staticmethod
     def get_image_capacity(image_path):
-        """
-        Calculate how many bits can be stored in an image.
-
-        Args:
-            image_path (str): Path to the image
-
-        Returns:
-            int: Number of bits that can be stored
-        """
+        
         try:
             img = Image.open(image_path)
             img_array = np.array(img)

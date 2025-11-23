@@ -1,12 +1,4 @@
-"""
-Pod Client for the Cryptography Project.
 
-This client:
-- Connects to the router server
-- Uses Diffie-Hellman for key exchange
-- Sends encrypted messages with AES-GCM
-- Displays Caesar cipher decoys
-"""
 
 import socket
 import threading
@@ -20,17 +12,9 @@ from stego_utils import StegoUtils
 
 
 class PodClient:
-    """Pod client for encrypted communication through router."""
 
     def __init__(self, pod_id, router_host, router_port=5555):
-        """
-        Initialize the pod client.
 
-        Args:
-            pod_id (str): Unique pod identifier (e.g., "POD_1")
-            router_host (str): Router IP address
-            router_port (int): Router port number
-        """
         self.pod_id = pod_id
         self.router_host = router_host
         self.router_port = router_port
@@ -48,7 +32,6 @@ class PodClient:
         self.connected_pods = []
 
     def connect(self):
-        """Connect to the router server."""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.router_host, self.router_port))
@@ -85,7 +68,6 @@ class PodClient:
             return False
 
     def _listen_for_messages(self):
-        """Listen for incoming messages from router."""
         while self.running:
             try:
                 msg = self._receive_message()
@@ -119,7 +101,6 @@ class PodClient:
                 break
 
     def _handle_dh_key_response(self, msg):
-        """Handle received DH public key from another pod."""
         target_id = msg.get('target_id')
         dh_public_key_str = msg.get('dh_public_key')
 
@@ -136,7 +117,6 @@ class PodClient:
             print(f"[INFO] Established shared secret with {target_id}")
 
     def _handle_new_pod_joined(self, msg):
-        """Handle notification of new pod joining and auto-compute shared secret."""
         pod_id = msg.get('pod_id')
         dh_public_key_str = msg.get('dh_public_key')
 
@@ -153,7 +133,6 @@ class PodClient:
             print(f"[INFO] {pod_id} joined! Auto-established shared secret.")
 
     def _handle_existing_pod_key(self, msg):
-        """Handle receiving existing pod's public key and auto-compute shared secret."""
         pod_id = msg.get('pod_id')
         dh_public_key_str = msg.get('dh_public_key')
 
@@ -170,7 +149,6 @@ class PodClient:
             print(f"[INFO] Received {pod_id}'s key. Auto-established shared secret.")
 
     def _handle_incoming_message(self, msg):
-        """Handle incoming encrypted message with steganography."""
         source_id = msg.get('source_id')
         message_data = msg.get('message_data', {})
 
@@ -230,7 +208,6 @@ class PodClient:
         print(f"{'=' * 60}\n")
 
     def request_shared_secret(self, target_id):
-        """Request DH public key from another pod to establish shared secret."""
         if target_id not in self.shared_secrets:
             request_msg = {
                 'type': 'request_dh_public_key',
@@ -243,14 +220,7 @@ class PodClient:
             time.sleep(0.5)
 
     def send_message(self, dest_id, real_message, decoy_message):
-        """
-        Send encrypted message to another pod.
 
-        Args:
-            dest_id (str): Destination pod ID
-            real_message (str): Real secret message
-            decoy_message (str): Decoy message (Caesar cipher)
-        """
         # Ensure we have shared secret
         if dest_id not in self.shared_secrets:
             self.request_shared_secret(dest_id)
@@ -317,7 +287,6 @@ class PodClient:
             return False
 
     def _send_message(self, message_dict):
-        """Send JSON message to router."""
         try:
             message_json = json.dumps(message_dict)
             message_bytes = message_json.encode('utf-8')
@@ -328,7 +297,6 @@ class PodClient:
             print(f"[ERROR] Send failed: {e}")
 
     def _receive_message(self):
-        """Receive JSON message from router."""
         try:
             length_bytes = self._recv_exactly(4)
             if not length_bytes:
@@ -347,7 +315,6 @@ class PodClient:
             return None
 
     def _recv_exactly(self, num_bytes):
-        """Receive exactly num_bytes from socket."""
         data = b''
         while len(data) < num_bytes:
             chunk = self.socket.recv(num_bytes - len(data))
@@ -357,7 +324,6 @@ class PodClient:
         return data
 
     def disconnect(self):
-        """Disconnect from router."""
         self.running = False
         if self.socket:
             try:
@@ -368,7 +334,6 @@ class PodClient:
 
 
 def main():
-    """Main function to run the pod client."""
     print("=" * 60)
     print("POD CLIENT - Cryptography Project")
     print("=" * 60)

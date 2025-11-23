@@ -1,5 +1,4 @@
 """
-Cryptography utilities for the secure messaging system.
 Uses Diffie-Hellman for key exchange, AES-GCM for encryption, and Caesar cipher for decoy.
 """
 
@@ -12,9 +11,8 @@ import json
 
 
 class CryptoUtils:
-    """Cryptography utility class with Diffie-Hellman, AES-GCM, and Caesar cipher."""
-
-    # Standard 2048-bit MODP Group (RFC 3526)
+    
+    # Standard 2048-bit MODP Group (RFC 3526), secure prime number modprime
     DH_PRIME = int(
         "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
         "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
@@ -32,28 +30,14 @@ class CryptoUtils:
 
     @staticmethod
     def generate_dh_keypair():
-        """
-        Generate Diffie-Hellman private and public keys.
 
-        Returns:
-            tuple: (private_key, public_key) as integers
-        """
         private_key = int.from_bytes(get_random_bytes(32), byteorder='big')
         public_key = pow(CryptoUtils.DH_GENERATOR, private_key, CryptoUtils.DH_PRIME)
         return private_key, public_key
 
     @staticmethod
     def compute_dh_shared_secret(private_key, other_public_key):
-        """
-        Compute shared secret using Diffie-Hellman.
 
-        Args:
-            private_key (int): Your private key
-            other_public_key (int): Other party's public key
-
-        Returns:
-            bytes: 32-byte shared secret (derived using HKDF)
-        """
         shared_secret = pow(other_public_key, private_key, CryptoUtils.DH_PRIME)
         shared_bytes = shared_secret.to_bytes(256, byteorder='big')
 
@@ -63,16 +47,7 @@ class CryptoUtils:
 
     @staticmethod
     def aes_gcm_encrypt(key, plaintext):
-        """
-        Encrypt data using AES-GCM.
 
-        Args:
-            key (bytes): AES key (32 bytes for AES-256)
-            plaintext (bytes or str): Data to encrypt
-
-        Returns:
-            dict: Dictionary containing 'nonce', 'ciphertext', and 'tag' as base64 strings
-        """
         if isinstance(plaintext, str):
             plaintext = plaintext.encode('utf-8')
 
@@ -87,16 +62,7 @@ class CryptoUtils:
 
     @staticmethod
     def aes_gcm_decrypt(key, encrypted_data):
-        """
-        Decrypt data using AES-GCM.
 
-        Args:
-            key (bytes): AES key
-            encrypted_data (dict): Dictionary with 'nonce', 'ciphertext', and 'tag'
-
-        Returns:
-            bytes: Decrypted data
-        """
         nonce = base64.b64decode(encrypted_data['nonce'])
         ciphertext = base64.b64decode(encrypted_data['ciphertext'])
         tag = base64.b64decode(encrypted_data['tag'])
@@ -108,16 +74,7 @@ class CryptoUtils:
 
     @staticmethod
     def caesar_cipher_encrypt(plaintext, shift=3):
-        """
-        Encrypt text using Caesar cipher (decoy encryption).
 
-        Args:
-            plaintext (str): Text to encrypt
-            shift (int): Number of positions to shift (default: 3)
-
-        Returns:
-            str: Caesar cipher encrypted text
-        """
         result = []
         for char in plaintext:
             if char.isalpha():
@@ -130,14 +87,5 @@ class CryptoUtils:
 
     @staticmethod
     def caesar_cipher_decrypt(ciphertext, shift=3):
-        """
-        Decrypt text using Caesar cipher.
-
-        Args:
-            ciphertext (str): Text to decrypt
-            shift (int): Number of positions to shift (default: 3)
-
-        Returns:
-            str: Decrypted text
-        """
+        
         return CryptoUtils.caesar_cipher_encrypt(ciphertext, -shift)

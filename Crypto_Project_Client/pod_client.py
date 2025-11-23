@@ -98,6 +98,12 @@ class PodClient:
                     self.connected_pods = msg.get('clients', [])
                     print(f"\n[INFO] Connected pods: {', '.join(self.connected_pods)}")
 
+                elif msg_type == 'new_pod_joined':
+                    self._handle_new_pod_joined(msg)
+
+                elif msg_type == 'existing_pod_key':
+                    self._handle_existing_pod_key(msg)
+
                 elif msg_type == 'dh_public_key_response':
                     self._handle_dh_key_response(msg)
 
@@ -129,27 +135,44 @@ class PodClient:
             self.shared_secrets[target_id] = shared_secret
             print(f"[INFO] Established shared secret with {target_id}")
 
+    def _handle_new_pod_joined(self, msg):
+        """Handle notification of new pod joining and auto-compute shared secret."""
+        pod_id = msg.get('pod_id')
+        dh_public_key_str = msg.get('dh_public_key')
+
+        if pod_id and dh_public_key_str:
+            other_public_key = int(dh_public_key_str)
+
+            # Compute shared secret immediately
+            shared_secret = CryptoUtils.compute_dh_shared_secret(
+                self.dh_private_key,
+                other_public_key
+            )
+
+            self.shared_secrets[pod_id] = shared_secret
+            print(f"[INFO] {pod_id} joined! Auto-established shared secret.")
+
+    def _handle_existing_pod_key(self, msg):
+        """Handle receiving existing pod's public key and auto-compute shared secret."""
+        pod_id = msg.get('pod_id')
+        dh_public_key_str = msg.get('dh_public_key')
+
+        if pod_id and dh_public_key_str:
+            other_public_key = int(dh_public_key_str)
+
+            # Compute shared secret immediately
+            shared_secret = CryptoUtils.compute_dh_shared_secret(
+                self.dh_private_key,
+                other_public_key
+            )
+
+            self.shared_secrets[pod_id] = shared_secret
+            print(f"[INFO] Received {pod_id}'s key. Auto-established shared secret.")
+
     def _handle_incoming_message(self, msg):
         """Handle incoming encrypted message with steganography."""
         source_id = msg.get('source_id')
         message_data = msg.get('message_data', {})
-
-        # Auto-establish shared secret if we don't have it
-        if source_id not in self.shared_secrets:
-            print(f"[INFO] No shared secret with {source_id}, requesting public key...")
-            self.request_shared_secret(source_id)
-
-            # Wait for shared secret to be established (with timeout)
-            max_wait = 5.0  # 5 seconds max
-            waited = 0.0
-            while source_id not in self.shared_secrets and waited < max_wait:
-                time.sleep(0.1)
-                waited += 0.1
-
-            if source_id in self.shared_secrets:
-                print(f"[INFO] Shared secret established with {source_id}")
-            else:
-                print(f"[ERROR] Timeout waiting for shared secret with {source_id}")
 
         caesar_decoy = message_data.get('caesar_decoy', 'N/A')
         stego_image_base64 = message_data.get('stego_image')

@@ -100,6 +100,12 @@ class RouterServer:
                         'message': f'Welcome {client_id}!'
                     })
 
+                    # Broadcast new pod's public key to all other clients
+                    self._broadcast_new_pod(client_id, dh_public_key)
+
+                    # Send all existing pods' public keys to the new pod
+                    self._send_existing_pods_keys(client_socket, client_id)
+
                     self._broadcast_client_list()
 
                     while self.running:
@@ -201,6 +207,35 @@ class RouterServer:
                         'message': f'Destination {dest_id} is not connected'
                     }
                     self._send_message(self.clients[source_id]['socket'], error_msg)
+
+    def _broadcast_new_pod(self, new_pod_id, dh_public_key):
+        """Broadcast new pod's public key to all other connected clients."""
+        with self.clients_lock:
+            message = {
+                'type': 'new_pod_joined',
+                'pod_id': new_pod_id,
+                'dh_public_key': dh_public_key
+            }
+
+            for client_id, client_info in self.clients.items():
+                if client_id != new_pod_id:  # Don't send to the new pod itself
+                    self._send_message(client_info['socket'], message)
+
+        print(f"[{self._timestamp()}] Broadcasted {new_pod_id}'s public key to all pods")
+
+    def _send_existing_pods_keys(self, new_client_socket, new_pod_id):
+        """Send all existing pods' public keys to the newly connected pod."""
+        with self.clients_lock:
+            for client_id, client_info in self.clients.items():
+                if client_id != new_pod_id:  # Don't send the pod its own key
+                    message = {
+                        'type': 'existing_pod_key',
+                        'pod_id': client_id,
+                        'dh_public_key': client_info['dh_public_key']
+                    }
+                    self._send_message(new_client_socket, message)
+
+        print(f"[{self._timestamp()}] Sent all existing pods' keys to {new_pod_id}")
 
     def _broadcast_client_list(self):
         """Broadcast the list of connected clients to all clients."""

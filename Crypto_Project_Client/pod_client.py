@@ -134,6 +134,12 @@ class PodClient:
         source_id = msg.get('source_id')
         message_data = msg.get('message_data', {})
 
+        # Auto-establish shared secret if we don't have it
+        if source_id not in self.shared_secrets:
+            print(f"[INFO] No shared secret with {source_id}, requesting public key...")
+            self.request_shared_secret(source_id)
+            time.sleep(1.5)  # Wait for DH key exchange to complete
+
         caesar_decoy = message_data.get('caesar_decoy', 'N/A')
         stego_image_base64 = message_data.get('stego_image')
 
